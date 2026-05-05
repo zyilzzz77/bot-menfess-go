@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/glebarez/go-sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
@@ -100,7 +100,7 @@ func (b *Bot) Start() error {
 	dbLog := waLog.Stdout("Database", "WARN", true)
 
 	// Create SQLite store for session persistence
-	container, err := sqlstore.New(context.Background(), "sqlite", "file:store/wa_session.db?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)", dbLog)
+	container, err := sqlstore.New(context.Background(), "sqlite3", "file:store/wa_session.db?_foreign_keys=on", dbLog)
 	if err != nil {
 		return fmt.Errorf("failed to create session store: %w", err)
 	}
@@ -226,8 +226,18 @@ func (b *Bot) setupTelegramCallbacks() {
 		// Disconnect existing connection if any
 		b.client.Disconnect()
 
-		// Remove old session
+		// Remove old session and WAL files
 		os.Remove("store/wa_session.db")
+		os.Remove("store/wa_session.db-wal")
+		os.Remove("store/wa_session.db-shm")
+
+		// Recreate the database container since we deleted the file
+		dbLog := waLog.Stdout("Database", "WARN", true)
+		container, err := sqlstore.New(context.Background(), "sqlite3", "file:store/wa_session.db?_foreign_keys=on", dbLog)
+		if err != nil {
+			return "", fmt.Errorf("failed to create session store: %w", err)
+		}
+		b.container = container
 
 		// Reinitialize client with fresh device store
 		if err := b.initClient(); err != nil {
@@ -261,6 +271,8 @@ func (b *Bot) setupTelegramCallbacks() {
 			// Force cleanup
 			b.client.Disconnect()
 			os.Remove("store/wa_session.db")
+			os.Remove("store/wa_session.db-wal")
+			os.Remove("store/wa_session.db-shm")
 		}
 		return err
 	}
@@ -347,6 +359,8 @@ func (b *Bot) eventHandler(evt interface{}) {
 		b.mu.Unlock()
 		fmt.Println("🔒 Session logged out.")
 		os.Remove("store/wa_session.db")
+		os.Remove("store/wa_session.db-wal")
+		os.Remove("store/wa_session.db-shm")
 		if b.tgBot != nil {
 			b.tgBot.NotifyLoggedOut()
 		}

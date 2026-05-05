@@ -5,6 +5,9 @@ FROM golang:1.25.0-alpine AS builder
 
 WORKDIR /app
 
+# Install gcc and musl-dev for CGO support (required for mattn/go-sqlite3)
+RUN apk add --no-cache gcc musl-dev
+
 # Copy go mod files and download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
@@ -12,8 +15,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary (no CGO needed — using pure-Go SQLite)
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o bot-wa .
+# Build the binary with CGO enabled
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -linkmode external -extldflags '-static'" -o bot-wa .
 
 # ============================================
 # Stage 2: Runtime image (super lightweight)
