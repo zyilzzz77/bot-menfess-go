@@ -16,7 +16,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary with CGO enabled
-RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -linkmode external -extldflags '-static'" -o bot-wa .
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w" -o bot-wa .
 
 # ============================================
 # Stage 2: Runtime image (super lightweight)
