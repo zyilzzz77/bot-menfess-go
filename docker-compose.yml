@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: wa-downloader-bot
     restart: unless-stopped
+    network_mode: host
     init: true
     env_file:
       - .env
