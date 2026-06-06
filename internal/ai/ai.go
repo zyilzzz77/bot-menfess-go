@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -54,10 +55,10 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model           string         `json:"model"`
-	Messages        []chatMessage  `json:"messages"`
-	MaxTokens       int            `json:"max_tokens,omitempty"`
-	ReasoningEffort string         `json:"reasoning_effort,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []chatMessage   `json:"messages"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
 	Thinking        *thinkingConfig `json:"thinking,omitempty"`
 }
 
@@ -103,11 +104,18 @@ func NewClient(cfg Config) *Client {
 	if cfg.HermesURL != "" {
 		// Ensure /v1 prefix for OpenAI-compatible API
 		hermesBase := strings.TrimRight(cfg.HermesURL, "/")
-		if !strings.HasSuffix(hermesBase, "/v1") {
-			hermesBase += "/v1"
+		if strings.HasSuffix(hermesBase, "/chat/completions") {
+			apiURL = hermesBase
+		} else {
+			if strings.HasSuffix(hermesBase, "/v1/chat") {
+				hermesBase = strings.TrimSuffix(hermesBase, "/chat")
+			}
+			if !strings.HasSuffix(hermesBase, "/v1") {
+				hermesBase += "/v1"
+			}
+			apiURL = hermesBase + "/chat/completions"
 		}
-		apiURL = hermesBase + "/chat/completions"
-		fmt.Printf("🧠 AI: Using Hermes Agent at %s\n", cfg.HermesURL)
+		fmt.Printf("🧠 AI: Using Hermes Agent at %s\n", apiURL)
 	} else {
 		fmt.Printf("🧠 AI: Using DeepSeek directly (%s)\n", cfg.Model)
 	}
@@ -193,8 +201,11 @@ func (c *Client) chatCompletion(ctx context.Context, messages []chatMessage) (st
 	req.Header.Set("Content-Type", "application/json")
 
 	// Auth: Hermes uses API_SERVER_KEY as Bearer, DeepSeek uses API key as Bearer
-	if c.config.HermesURL != "" && c.config.HermesKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.config.HermesKey)
+	if c.config.HermesURL != "" {
+		if c.config.HermesKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.config.HermesKey)
+			req.Header.Set("X-API-Key", c.config.HermesKey)
+		}
 	} else {
 		req.Header.Set("Authorization", "Bearer "+c.config.DeepSeekKey)
 	}
@@ -205,8 +216,16 @@ func (c *Client) chatCompletion(ctx context.Context, messages []chatMessage) (st
 	}
 	defer resp.Body.Close()
 
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("API HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
 	var apiResp chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		return "", fmt.Errorf("parse response: %w", err)
 	}
 

@@ -98,7 +98,7 @@ func NewBot(cfg Config) *Bot {
 	dl := downloader.NewDownloader(cfg.APIKey, cfg.DownloadDir)
 
 	var aiClient *ai.Client
-	if cfg.DeepSeekKey != "" {
+	if cfg.DeepSeekKey != "" || cfg.HermesURL != "" {
 		aiClient = ai.NewClient(ai.Config{
 			DeepSeekKey:  cfg.DeepSeekKey,
 			Model:        cfg.AIModel,
@@ -106,9 +106,13 @@ func NewBot(cfg Config) *Bot {
 			HermesURL:    cfg.HermesURL,
 			HermesKey:    cfg.HermesKey,
 		})
-		fmt.Println("✅ AI (DeepSeek) configured")
+		if cfg.HermesURL != "" {
+			fmt.Println("✅ AI (Hermes) configured")
+		} else {
+			fmt.Println("✅ AI (DeepSeek) configured")
+		}
 	} else {
-		fmt.Println("ℹ️  AI features not configured (set DEEPSEEK_API_KEY in .env)")
+		fmt.Println("ℹ️  AI features not configured (set HERMES_API_URL or DEEPSEEK_API_KEY in .env)")
 	}
 
 	return &Bot{
