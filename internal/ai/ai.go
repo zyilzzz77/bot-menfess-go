@@ -17,6 +17,7 @@ type Config struct {
 	DeepSeekKey     string
 	DeepSeekBaseURL string // default: https://api.deepseek.com/v1/chat/completions
 	HermesURL       string // optional: Hermes Agent API (http://localhost:8642/v1)
+	HermesKey       string // optional: API_SERVER_KEY for Hermes auth
 	Model           string
 	SystemPrompt    string
 	MaxTokens       int
@@ -185,7 +186,13 @@ func (c *Client) chatCompletion(ctx context.Context, messages []chatMessage) (st
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.DeepSeekKey)
+
+	// Auth: Hermes uses API_SERVER_KEY header, DeepSeek uses Bearer token
+	if c.config.HermesURL != "" && c.config.HermesKey != "" {
+		req.Header.Set("X-API-Key", c.config.HermesKey)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+c.config.DeepSeekKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
