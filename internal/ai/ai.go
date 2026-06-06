@@ -101,7 +101,12 @@ func NewClient(cfg Config) *Client {
 	// Resolve API URL: Hermes Agent (if set) or DeepSeek directly
 	apiURL := cfg.DeepSeekBaseURL
 	if cfg.HermesURL != "" {
-		apiURL = cfg.HermesURL + "/chat/completions"
+		// Ensure /v1 prefix for OpenAI-compatible API
+		hermesBase := strings.TrimRight(cfg.HermesURL, "/")
+		if !strings.HasSuffix(hermesBase, "/v1") {
+			hermesBase += "/v1"
+		}
+		apiURL = hermesBase + "/chat/completions"
 		fmt.Printf("🧠 AI: Using Hermes Agent at %s\n", cfg.HermesURL)
 	} else {
 		fmt.Printf("🧠 AI: Using DeepSeek directly (%s)\n", cfg.Model)
