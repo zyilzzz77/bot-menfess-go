@@ -1,8 +1,8 @@
-# WhatsApp Social Media Downloader Bot v3.0
+# Bot WA AI LLM · Downloader v4.0
 
 ## Overview
 
-Bot WhatsApp berbasis Go yang otomatis mendeteksi dan mengunduh media dari berbagai platform sosial media. Bot menggunakan REST API (neoxr.eu) untuk download media, WhatsApp Web API (whatsmeow) untuk komunikasi, dan Telegram Bot API untuk remote monitoring/control.
+Bot WhatsApp berbasis Go dengan **dual function**: download media sosial + AI chat (Hermes Agent + DeepSeek v4-pro). Bot otomatis mendeteksi link sosmed untuk download, atau merespon dengan AI untuk pesan teks biasa (tanpa `/ai` prefix).
 
 ---
 
@@ -12,8 +12,10 @@ Bot WhatsApp berbasis Go yang otomatis mendeteksi dan mengunduh media dari berba
 |----------|-----------|
 | Language | Go 1.25+ |
 | WhatsApp Client | `go.mau.fi/whatsmeow` |
-| SQLite Driver | `github.com/glebarez/go-sqlite` (pure-Go, no CGO) |
+| SQLite Driver | `github.com/mattn/go-sqlite3` (CGO) |
 | Download API | `api.neoxr.eu` (REST API) |
+| AI Engine | Hermes Agent + DeepSeek v4-pro (thinking mode) |
+| AI Fallback | Direct DeepSeek API (jika Hermes unavailable) |
 | Telegram Bot | Native HTTP (no external lib) |
 | Auth | Phone pairing code (8 digit) |
 | Container | Docker multi-stage build, Alpine |
@@ -39,12 +41,11 @@ bot-wa/
     │   ├── bot.go                       # WhatsApp client lifecycle, Telegram integration
     │   ├── handler.go                   # Router: commands, URLs, playlist reply, menfess entrypoint
     │   ├── handler_brat.go              # Brat text-to-sticker command
-    │   ├── handler_download.go          # Download flow, anti-spam, tiktok audio-only
+    │   ├── handler_download.go          # Download flow, anti-spam, TikTok audio button
     │   ├── handler_menfess.go           # Anonymous relay + balas command
     │   ├── handler_messaging.go         # Shared send/edit/react helpers
     │   ├── handler_playlist.go          # Spotify playlist flow
-    │   ├── handler_progress.go          # Minimal progress/status tracker
-    │   └── handler_sticker.go           # Photo-to-sticker flow with square canvas
+        │   └── handler_sticker.go           # Photo-to-sticker flow with square canvas
     ├── downloader/
     │   ├── downloader.go                # Core: types, TikTok API, file downloader, routing
     │   ├── instagram.go                 # Instagram API downloader
@@ -52,9 +53,12 @@ bot-wa/
     │   ├── spotify.go                   # Spotify single track downloader
     │   ├── spotify_playlist.go          # Spotify playlist fetcher
     │   ├── threads.go                   # Threads API downloader
+    │   ├── twitter.go                   # Twitter/X API downloader
     │   └── brat.go                      # Brat sticker generator API wrapper
     ├── telegram/
     │   └── telegram.go                  # Telegram bot: polling, commands, notifications
+    ├── ai/
+    │   └── ai.go                       # AI client: DeepSeek + Hermes Agent integration
     └── utils/
         └── url.go                       # URL detection, platform patterns, regex matching
 ```
@@ -71,6 +75,9 @@ API_KEY=OXlJB9                    # API key dari neoxr.eu
 DOWNLOAD_DIR=./downloads          # Direktori download sementara
 TELEGRAM_BOT_TOKEN=               # Token dari @BotFather
 TELEGRAM_ADMIN_ID=                # Chat ID admin (dari @userinfobot)
+DEEPSEEK_API_KEY=                 # API key DeepSeek
+HERMES_API_URL=                   # Hermes Agent API (localhost:8642/v1)
+HERMES_API_KEY=                   # Hermes API_SERVER_KEY
 ```
 
 > Untuk deploy ke VPS/headless, isi `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_ADMIN_ID` supaya pairing bisa dilakukan lewat Telegram `/pair`.
@@ -121,6 +128,27 @@ TELEGRAM_ADMIN_ID=                # Chat ID admin (dari @userinfobot)
 - **Logic:** Iterasi setiap item, deteksi tipe dari field `type` (mp4→video, jpg→image). Support carousel. Title auto-generated: "Threads Photo", "Threads Video", "Threads Carousel (N media)".
 
 ---
+
+
+
+---
+
+## AI Chat (Hermes Agent + DeepSeek v4-pro)
+
+**Auto-AI:** Semua pesan teks tanpa link sosmed otomatis dijawab AI. Tidak perlu  prefix.
+
+| Fitur | Deskripsi |
+|-------|-----------|
+| Thinking Mode |  via DeepSeek v4-pro |
+| Image Analysis | Kirim gambar + caption  |
+| Hermes Agent | Ratusan tools (web search, browser, skills, memory) |
+| Direct Fallback | Jika Hermes unavailable, bot langsung ke DeepSeek |
+
+### AI Architecture
+
+WhatsApp -> Bot Go -> [Hermes Agent (port 8642) / DeepSeek Direct]
+
+Hermes menyediakan OpenAI-compatible API di .
 
 ## URL Detection (`internal/utils/url.go`)
 
