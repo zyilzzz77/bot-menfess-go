@@ -214,9 +214,11 @@ func (h *Handler) sendTikTokAudioButton(chat types.JID, tiktokURL string) {
 		},
 	}
 
-	_, err := h.client.SendMessage(context.Background(), chat, msg)
+	resp, err := h.client.SendMessage(context.Background(), chat, msg)
 	if err != nil {
 		fmt.Printf("⚠️ Failed to send TikTok audio button: %v\n", err)
+	} else {
+		fmt.Printf("🔘 [TikTok Button] Sent audio button (msgID: %s, buttonID: %s)\n", resp.ID, buttonID)
 	}
 }
 

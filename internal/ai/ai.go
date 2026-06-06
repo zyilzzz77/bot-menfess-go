@@ -222,24 +222,28 @@ func (c *Client) WebSearch(ctx context.Context, query string) ([]SearchResult, e
 }
 
 // parseDuckDuckGoLite extracts search results from DuckDuckGo Lite HTML.
+//
+// DDG Lite HTML structure (table-based):
+//
+//	<a rel="nofollow" href="//duckduckgo.com/l/?uddg=..." class='result-link'>Title</a>
+//	...
+//	<td class='result-snippet'>
+//	  Snippet text with <b>bold</b> tags
+//	</td>
 func parseDuckDuckGoLite(html []byte) []SearchResult {
 	var results []SearchResult
 	content := string(html)
 
-	// DuckDuckGo Lite uses simple HTML structure:
-	// <a rel="nofollow" href="URL" class="result-link">Title</a>
-	// <span class="result-snippet">Snippet</span>
-
-	// Split by result sections
 	lines := strings.Split(content, "\n")
 	var currentTitle, currentURL, currentSnippet string
+	inSnippet := false
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
 
 		// Extract link: <a rel="nofollow" href="URL" class="result-link">Title</a>
-		if strings.Contains(line, "class=\"result-link\"") || strings.Contains(line, "class='result-link'") {
-			// Save previous result if exists
+		if strings.Contains(trimmed, "class=\"result-link\"") || strings.Contains(trimmed, "class='result-link'") {
+			// Save previous result
 			if currentURL != "" && currentTitle != "" {
 				results = append(results, SearchResult{
 					Title:   cleanHTML(currentTitle),
@@ -248,46 +252,71 @@ func parseDuckDuckGoLite(html []byte) []SearchResult {
 				})
 			}
 
-			// Extract href
-			hrefStart := strings.Index(line, "href=\"")
-			if hrefStart < 0 {
-				hrefStart = strings.Index(line, "href='")
-				if hrefStart < 0 {
-					continue
-				}
-				hrefStart += 6
-				hrefEnd := strings.Index(line[hrefStart:], "'")
-				if hrefEnd < 0 {
-					continue
-				}
-				currentURL = line[hrefStart : hrefStart+hrefEnd]
-			} else {
-				hrefStart += 6
-				hrefEnd := strings.Index(line[hrefStart:], "\"")
-				if hrefEnd < 0 {
-					continue
-				}
-				currentURL = line[hrefStart : hrefStart+hrefEnd]
-			}
+			// Extract href (supports both " and ' quotes)
+			currentURL = extractHref(trimmed)
+
+			// Decode DDG redirect URL to get the real URL
+			currentURL = decodeDDGURL(currentURL)
 
 			// Extract title text between > and </a>
-			titleStart := strings.LastIndex(line, ">")
+			titleStart := strings.LastIndex(trimmed, ">")
 			if titleStart >= 0 {
-				titleEnd := strings.Index(line[titleStart:], "</a>")
+				titleEnd := strings.Index(trimmed[titleStart:], "</a>")
 				if titleEnd >= 0 {
-					currentTitle = line[titleStart+1 : titleStart+titleEnd]
+					currentTitle = trimmed[titleStart+1 : titleStart+titleEnd]
 				}
 			}
 			currentSnippet = ""
+			inSnippet = false
 		}
 
-		// Extract snippet: <span class="result-snippet">Snippet</span>
-		if strings.Contains(line, "class=\"result-snippet\"") || strings.Contains(line, "class='result-snippet'") {
-			snipStart := strings.Index(line, ">")
-			if snipStart >= 0 {
-				snipEnd := strings.Index(line[snipStart:], "</span>")
-				if snipEnd >= 0 {
-					currentSnippet = line[snipStart+1 : snipStart+snipEnd]
+		// Detect snippet opening: <td class='result-snippet'>
+		if strings.Contains(trimmed, "class=\"result-snippet\"") || strings.Contains(trimmed, "class='result-snippet'") {
+			inSnippet = true
+			// Check if snippet text is on the same line (after the td tag)
+			afterTag := trimmed
+			if gtIdx := strings.Index(trimmed, ">"); gtIdx >= 0 {
+				afterTag = strings.TrimSpace(trimmed[gtIdx+1:])
+			}
+			if afterTag != "" && !strings.HasPrefix(afterTag, "</td") {
+				// Check if </td> is on the same line
+				if tdEnd := strings.Index(afterTag, "</td>"); tdEnd >= 0 {
+					currentSnippet = strings.TrimSpace(afterTag[:tdEnd])
+				} else {
+					currentSnippet = afterTag
+				}
+			}
+			continue
+		}
+
+		// Collect snippet text (may span multiple lines until </td>)
+		if inSnippet {
+			if strings.Contains(trimmed, "</td>") {
+				// End of snippet — extract text before </td>
+				endIdx := strings.Index(trimmed, "</td>")
+				if endIdx > 0 {
+					extra := strings.TrimSpace(trimmed[:endIdx])
+					if extra != "" {
+						if currentSnippet != "" {
+							currentSnippet += " "
+						}
+						currentSnippet += extra
+					}
+				}
+				inSnippet = false
+			} else if trimmed != "" {
+				// Middle line of snippet
+				if currentSnippet != "" {
+					currentSnippet += " "
+				}
+				currentSnippet += trimmed
+			}
+
+			// Also look ahead for a standalone closing </td>
+			if !strings.Contains(trimmed, "</td>") && i+1 < len(lines) {
+				nextTrimmed := strings.TrimSpace(lines[i+1])
+				if strings.HasPrefix(nextTrimmed, "</td>") || nextTrimmed == "</td>" {
+					inSnippet = false
 				}
 			}
 		}
@@ -308,6 +337,52 @@ func parseDuckDuckGoLite(html []byte) []SearchResult {
 	}
 
 	return results
+}
+
+// extractHref extracts the URL from an HTML href attribute.
+func extractHref(line string) string {
+	for _, quote := range []string{"\"", "'"} {
+		prefix := "href=" + quote
+		hrefStart := strings.Index(line, prefix)
+		if hrefStart < 0 {
+			continue
+		}
+		hrefStart += len(prefix)
+		hrefEnd := strings.Index(line[hrefStart:], quote)
+		if hrefEnd >= 0 {
+			return line[hrefStart : hrefStart+hrefEnd]
+		}
+	}
+	return ""
+}
+
+// decodeDDGURL extracts the real URL from a DuckDuckGo redirect URL.
+// DDG Lite URLs look like: //duckduckgo.com/l/?uddg=ENCODED_URL&rut=...
+func decodeDDGURL(rawURL string) string {
+	// If it's a DDG redirect URL, extract the uddg parameter
+	if strings.Contains(rawURL, "duckduckgo.com/l/?") {
+		// Find uddg= parameter
+		uddgStart := strings.Index(rawURL, "uddg=")
+		if uddgStart >= 0 {
+			uddgStart += 5
+			uddgEnd := strings.Index(rawURL[uddgStart:], "&")
+			uddgVal := ""
+			if uddgEnd >= 0 {
+				uddgVal = rawURL[uddgStart : uddgStart+uddgEnd]
+			} else {
+				uddgVal = rawURL[uddgStart:]
+			}
+			// URL decode
+			if decoded, err := url.QueryUnescape(uddgVal); err == nil {
+				return decoded
+			}
+		}
+	}
+	// Add https: prefix for protocol-relative URLs
+	if strings.HasPrefix(rawURL, "//") {
+		rawURL = "https:" + rawURL
+	}
+	return rawURL
 }
 
 // cleanHTML strips basic HTML tags and decodes common entities.
