@@ -61,8 +61,9 @@ func StartTLSProxy() {
 		io.Copy(w, resp.Body)
 	}
 
-	fmt.Printf("🔄 [TLS Proxy] http://localhost:%s -> %s\n", port, target)
+	addr := "127.0.0.1:" + port
+	fmt.Printf("🔄 [TLS Proxy] http://%s -> %s\n", addr, target)
 	go func() {
-		log.Fatal(http.ListenAndServe(":"+port, http.HandlerFunc(handler)))
+		log.Fatal(http.ListenAndServe(addr, http.HandlerFunc(handler)))
 	}()
 }
