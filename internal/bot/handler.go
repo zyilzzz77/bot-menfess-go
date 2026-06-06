@@ -199,18 +199,8 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 		return
 	}
 
-	// AI chat commands
+	// AI chat commands (thinking mode via DeepSeek v4-pro)
 	if h.ai != nil {
-		// AI + web search: /ais or .ais
-		if searchQuery, ok := parseAISCommand(msg); ok {
-			if !h.checkAIRateLimit(chatKey) {
-				h.sendText(chat, "⏳ Mohon tunggu beberapa detik sebelum bertanya lagi.")
-				return
-			}
-			go h.handleAISearchCommand(evt, searchQuery)
-			return
-		}
-
 		// AI chat: /ai or .ai
 		if aiText, ok := parseAICommand(msg); ok {
 			if !h.checkAIRateLimit(chatKey) {
@@ -323,10 +313,8 @@ func (h *Handler) sendHelp(evt *events.Message) {
 🐦 Twitter/X — Photos, Videos, Carousel
 
 *AI Commands:* (jika DEEPSEEK_API_KEY di-set)
-/ai <pertanyaan> — Tanya AI (teks)
+/ai <pertanyaan> — Tanya AI (thinking mode)
 .ai <pertanyaan> — Sama, dengan prefix titik
-/ais <kata kunci> — AI + web search
-.ai <kata kunci> — Sama, dengan prefix titik
 Kirim gambar + caption /ai — Analisis gambar
 
 *Commands Lainnya:*
