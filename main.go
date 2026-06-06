@@ -13,10 +13,10 @@ import (
 
 func main() {
 	fmt.Println("╔══════════════════════════════════════════════════╗")
-	fmt.Println("║  🤖 WhatsApp Social Media Downloader Bot v3.0  ║")
+	fmt.Println("║  🤖 Bot WA AI LLM · Downloader v4.0  ║")
 	fmt.Println("║──────────────────────────────────────────────────║")
-	fmt.Println("║  Supports: TikTok · Instagram · Spotify · Threads ║")
-	fmt.Println("║  Remote Control: Telegram Bot                   ║")
+	fmt.Println("║  Media: TikTok · IG · Twitter · Spotify · Threads ║")
+	fmt.Println("║  AI: DeepSeek v4-pro · Thinking Mode                   ║")
 	fmt.Println("╚══════════════════════════════════════════════════╝")
 	fmt.Println()
 
