@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -98,6 +99,14 @@ func NewClient(cfg Config) *Client {
 		config: cfg,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return (&net.Dialer{
+						Timeout:   30 * time.Second,
+						KeepAlive: 30 * time.Second,
+					}).DialContext(ctx, "tcp4", addr)
+				},
+			},
 		},
 	}
 }

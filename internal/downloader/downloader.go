@@ -69,10 +69,13 @@ func NewDownloader(apiKey string, downloadDir string) *Downloader {
 			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					// Force IPv4 to avoid "network is unreachable" on IPv6-only hosts
+					return (&net.Dialer{
+						Timeout:   30 * time.Second,
+						KeepAlive: 30 * time.Second,
+					}).DialContext(ctx, "tcp4", addr)
+				},
 				ForceAttemptHTTP2:     true,
 				MaxIdleConns:          100,
 				MaxIdleConnsPerHost:   20,
