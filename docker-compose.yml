@@ -5,10 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: wa-downloader-bot
     restart: unless-stopped
+    network_mode: host
     init: true
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     env_file:
       - .env
     volumes:
