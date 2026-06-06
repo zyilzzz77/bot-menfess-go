@@ -187,9 +187,9 @@ func (c *Client) chatCompletion(ctx context.Context, messages []chatMessage) (st
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Auth: Hermes uses API_SERVER_KEY header, DeepSeek uses Bearer token
+	// Auth: Hermes uses API_SERVER_KEY as Bearer, DeepSeek uses API key as Bearer
 	if c.config.HermesURL != "" && c.config.HermesKey != "" {
-		req.Header.Set("X-API-Key", c.config.HermesKey)
+		req.Header.Set("Authorization", "Bearer "+c.config.HermesKey)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+c.config.DeepSeekKey)
 	}
