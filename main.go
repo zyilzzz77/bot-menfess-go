@@ -16,7 +16,7 @@ func main() {
 	fmt.Println("║  🤖 Bot WA AI LLM · Downloader v4.0  ║")
 	fmt.Println("║──────────────────────────────────────────────────║")
 	fmt.Println("║  Media: TikTok · IG · Twitter · Spotify · Threads ║")
-	fmt.Println("║  AI: DeepSeek v4-pro · Thinking Mode                   ║")
+	fmt.Println("║  AI: Hermes Agent + DeepSeek v4-pro · Auto-Ready                   ║")
 	fmt.Println("╚══════════════════════════════════════════════════╝")
 	fmt.Println()
 

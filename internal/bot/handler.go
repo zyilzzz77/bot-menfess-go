@@ -277,6 +277,16 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 
 	platform := utils.DetectSocialMediaURL(msg)
 	if platform == nil {
+		// No social media link — route to AI (Hermes + DeepSeek)
+		if h.ai != nil {
+			if !h.checkAIRateLimit(chatKey) {
+				h.sendText(chat, "⏳ Mohon tunggu beberapa detik...")
+				return
+			}
+			go h.handleAICommand(evt, msg)
+			return
+		}
+		// AI not configured — ignore
 		return
 	}
 
@@ -312,7 +322,7 @@ func (h *Handler) sendHelp(evt *events.Message) {
 🧵 Threads — Photos, Videos, Carousel
 🐦 Twitter/X — Photos, Videos, Carousel
 
-*AI Commands:* (jika DEEPSEEK_API_KEY di-set)
+*AI (Hermes + DeepSeek v4-pro):*
 /ai <pertanyaan> — Tanya AI (thinking mode)
 .ai <pertanyaan> — Sama, dengan prefix titik
 Kirim gambar + caption /ai — Analisis gambar
