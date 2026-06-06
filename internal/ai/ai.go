@@ -218,7 +218,18 @@ func (c *Client) WebSearch(ctx context.Context, query string) ([]SearchResult, e
 		return nil, fmt.Errorf("read search response: %w", err)
 	}
 
-	return parseDuckDuckGoLite(body), nil
+	results := parseDuckDuckGoLite(body)
+	fmt.Printf("🔍 [DDG] HTTP %d, body=%d bytes, results=%d\n", resp.StatusCode, len(body), len(results))
+	if len(results) == 0 && len(body) > 0 {
+		// Debug: dump first 500 chars of HTML to see what we're getting
+		preview := string(body)
+		if len(preview) > 500 {
+			preview = preview[:500]
+		}
+		fmt.Printf("🔍 [DDG Debug] HTML preview: %s\n", preview)
+	}
+
+	return results, nil
 }
 
 // parseDuckDuckGoLite extracts search results from DuckDuckGo Lite HTML.

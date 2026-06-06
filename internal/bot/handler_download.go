@@ -199,8 +199,10 @@ func (h *Handler) sendTikTokAudioButton(chat types.JID, tiktokURL string) {
 
 	msg := &waProto.Message{
 		ButtonsMessage: &waProto.ButtonsMessage{
+			Header:      &waProto.ButtonsMessage_Text{Text: "🎵 TikTok Audio"},
 			ContentText: proto.String("Ingin download audio dari TikTok ini?"),
 			FooterText:  proto.String("Bot WA Downloader"),
+			HeaderType:  waProto.ButtonsMessage_TEXT.Enum(),
 			Buttons: []*waProto.ButtonsMessage_Button{
 				{
 					ButtonID: proto.String(buttonID),
@@ -210,7 +212,6 @@ func (h *Handler) sendTikTokAudioButton(chat types.JID, tiktokURL string) {
 					Type: waProto.ButtonsMessage_Button_RESPONSE.Enum(),
 				},
 			},
-			HeaderType: waProto.ButtonsMessage_EMPTY.Enum(),
 		},
 	}
 
