@@ -29,6 +29,7 @@ type Config struct {
 	DeepSeekKey    string
 	AIModel        string
 	AISystemPrompt string
+	HermesURL      string // optional: Hermes Agent API base URL
 	TgBot          *telegram.Bot
 }
 
@@ -101,6 +102,7 @@ func NewBot(cfg Config) *Bot {
 			DeepSeekKey:  cfg.DeepSeekKey,
 			Model:        cfg.AIModel,
 			SystemPrompt: cfg.AISystemPrompt,
+			HermesURL:    cfg.HermesURL,
 		})
 		fmt.Println("✅ AI (DeepSeek) configured")
 	} else {

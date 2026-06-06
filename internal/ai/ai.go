@@ -16,16 +16,18 @@ import (
 type Config struct {
 	DeepSeekKey     string
 	DeepSeekBaseURL string // default: https://api.deepseek.com/v1/chat/completions
+	HermesURL       string // optional: Hermes Agent API (http://localhost:8642/v1)
 	Model           string
 	SystemPrompt    string
 	MaxTokens       int
 	ReasoningEffort string // "high" or "max" for thinking mode
 }
 
-// Client handles all AI API calls (DeepSeek chat).
+// Client handles all AI API calls (DeepSeek chat, optionally via Hermes Agent).
 type Client struct {
 	config     Config
 	httpClient *http.Client
+	apiURL     string // resolved API endpoint
 }
 
 // --- DeepSeek Chat Completion Types ---
@@ -95,8 +97,18 @@ func NewClient(cfg Config) *Client {
 		cfg.ReasoningEffort = "high"
 	}
 
+	// Resolve API URL: Hermes Agent (if set) or DeepSeek directly
+	apiURL := cfg.DeepSeekBaseURL
+	if cfg.HermesURL != "" {
+		apiURL = cfg.HermesURL + "/chat/completions"
+		fmt.Printf("🧠 AI: Using Hermes Agent at %s\n", cfg.HermesURL)
+	} else {
+		fmt.Printf("🧠 AI: Using DeepSeek directly (%s)\n", cfg.Model)
+	}
+
 	return &Client{
 		config: cfg,
+		apiURL: apiURL,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
@@ -167,7 +179,7 @@ func (c *Client) chatCompletion(ctx context.Context, messages []chatMessage) (st
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.DeepSeekBaseURL, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}

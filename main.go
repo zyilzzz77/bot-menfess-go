@@ -33,6 +33,7 @@ func main() {
 	deepseekKey := os.Getenv("DEEPSEEK_API_KEY")
 	aiModel := getEnv("AI_MODEL", "deepseek-v4-pro")
 	aiSystemPrompt := os.Getenv("AI_SYSTEM_PROMPT")
+	hermesURL := os.Getenv("HERMES_API_URL") // optional: Hermes Agent API
 
 	if apiKey == "" {
 		fmt.Println("⚠️  API_KEY belum di-set!")
@@ -68,6 +69,7 @@ func main() {
 		DeepSeekKey:    deepseekKey,
 		AIModel:        aiModel,
 		AISystemPrompt: aiSystemPrompt,
+		HermesURL:      hermesURL,
 		TgBot:          tgBot,
 	})
 	if err := b.Start(); err != nil {
