@@ -9,6 +9,7 @@ import (
 
 	"bot-wa/internal/bot"
 	"bot-wa/internal/telegram"
+	"bot-wa/proxy"
 )
 
 func main() {
@@ -35,6 +36,11 @@ func main() {
 	aiSystemPrompt := os.Getenv("AI_SYSTEM_PROMPT")
 	hermesURL := os.Getenv("HERMES_API_URL")   // optional: Hermes Agent API
 	hermesKey := os.Getenv("HERMES_API_KEY")  // optional: Hermes API_SERVER_KEY
+
+	// Start TLS proxy if Hermes is configured (bypasses OpenSSL 3.0.13 issue)
+	if hermesURL != "" {
+		proxy.StartTLSProxy()
+	}
 
 	if apiKey == "" {
 		fmt.Println("⚠️  API_KEY belum di-set!")
