@@ -31,6 +31,7 @@ func main() {
 
 	// AI Configuration (optional)
 	deepseekKey := os.Getenv("DEEPSEEK_API_KEY")
+	aiModel := getEnv("AI_MODEL", "deepseek-v4-pro")
 	aiSystemPrompt := os.Getenv("AI_SYSTEM_PROMPT")
 
 	if apiKey == "" {
@@ -65,6 +66,7 @@ func main() {
 		APIKey:         apiKey,
 		DownloadDir:    downloadDir,
 		DeepSeekKey:    deepseekKey,
+		AIModel:        aiModel,
 		AISystemPrompt: aiSystemPrompt,
 		TgBot:          tgBot,
 	})

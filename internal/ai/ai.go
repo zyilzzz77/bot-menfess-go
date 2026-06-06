@@ -87,7 +87,7 @@ func NewClient(cfg Config) *Client {
 		cfg.DeepSeekBaseURL = "https://api.deepseek.com/v1/chat/completions"
 	}
 	if cfg.Model == "" {
-		cfg.Model = "deepseek-chat"
+		cfg.Model = "deepseek-v4-pro"
 	}
 	if cfg.SystemPrompt == "" {
 		cfg.SystemPrompt = "Kamu adalah asisten AI yang membantu dan ramah. Jawablah dalam bahasa Indonesia kecuali ditanya dalam bahasa lain. Berikan jawaban yang informatif, akurat, dan to the point. Jaga jawaban tetap ringkas untuk WhatsApp."

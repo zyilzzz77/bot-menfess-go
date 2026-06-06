@@ -27,6 +27,7 @@ type Config struct {
 	APIKey         string
 	DownloadDir    string
 	DeepSeekKey    string
+	AIModel        string
 	AISystemPrompt string
 	TgBot          *telegram.Bot
 }
@@ -98,6 +99,7 @@ func NewBot(cfg Config) *Bot {
 	if cfg.DeepSeekKey != "" {
 		aiClient = ai.NewClient(ai.Config{
 			DeepSeekKey:  cfg.DeepSeekKey,
+			Model:        cfg.AIModel,
 			SystemPrompt: cfg.AISystemPrompt,
 		})
 		fmt.Println("✅ AI (DeepSeek) configured")
