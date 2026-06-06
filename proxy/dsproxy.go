@@ -1,29 +1,37 @@
 package proxy
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"time"
 )
 
 // StartTLSProxy runs a local HTTP-to-HTTPS proxy for DeepSeek.
-// Hermes connects to http://localhost:8650/v1, proxy forwards to https://api.deepseek.com.
-// Needed because VPS OpenSSL 3.0.13 is rejected by DeepSeek's CDN.
+// Hermes connects to http://127.0.0.1:8650, proxy forwards to https://api.deepseek.com.
+// Uses the same transport config as the working downloader.
 func StartTLSProxy() {
-	target := "https://api.deepseek.com" // DeepSeek endpoint: /chat/completions (no /v1)
+	target := "https://api.deepseek.com"
 	port := "8650"
 	if v := os.Getenv("PROXY_PORT"); v != "" {
 		port = v
 	}
 
 	client := &http.Client{
+		Timeout: 120 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS13,
-			},
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   15 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
 		},
 	}
 
