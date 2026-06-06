@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// processDownload handles the full download and send flow
+// processDownload handles the full download and send flow.
 func (h *Handler) processDownload(evt *events.Message, platform *utils.PlatformInfo) {
 	chat := evt.Info.Chat
 	chatKey := chat.String()
@@ -25,74 +25,42 @@ func (h *Handler) processDownload(evt *events.Message, platform *utils.PlatformI
 	fmt.Printf("📥 [%s] Download request from %s: %s\n", platform.Label, sender, platform.URL)
 	h.reactToRequest(evt, "⚡")
 
-	// Start progress tracker (sends initial message + live updates)
-	progress := h.newProgressTracker(chat, platform.Label)
-
-	// Download the media via API
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-
-	// Update progress stage
-	if progress != nil {
-		progress.setStage("📥 Mengunduh media...")
-	}
 
 	result, err := h.downloader.DownloadGeneric(ctx, string(platform.Platform), platform.URL)
 	if err != nil {
 		fmt.Printf("❌ Download failed for %s: %v\n", platform.URL, err)
-		if progress != nil {
-			progress.finish(fmt.Sprintf(
-				"❌ *Download gagal*\n\nMaaf, tidak bisa download dari %s.\nError: %s\n\n💡 Tips:\n• Pastikan link valid dan tidak private\n• Konten mungkin dilindungi atau region-locked\n• Coba lagi nanti",
-				platform.Label,
-				truncateError(err.Error()),
-			))
-		}
+		h.reactToRequest(evt, "❌")
+		h.sendText(chat, fmt.Sprintf("❌ Gagal download dari %s", platform.Label))
 		return
 	}
 	defer h.downloader.CleanupAll(result)
 
 	totalItems := len(result.Items)
-
-	// Update progress: uploading to WhatsApp
-	if progress != nil {
-		if totalItems > 1 {
-			progress.setStage(fmt.Sprintf("📤 Mengirim %d media ke WhatsApp...", totalItems))
-		} else {
-			progress.setStage("📤 Mengirim media ke WhatsApp...")
-		}
-	}
-
-	// Send each media item
 	successCount := 0
 
 	for i, item := range result.Items {
 		fileSizeMB := float64(item.FileSize) / 1024 / 1024
 		if fileSizeMB > 64 {
-			h.sendText(chat, fmt.Sprintf(
-				"⚠️ File %d/%d terlalu besar (%.1fMB). Maks 64MB.",
-				i+1, totalItems, fileSizeMB,
-			))
+			h.sendText(chat, fmt.Sprintf("⚠️ File %d/%d terlalu besar (%.1fMB). Maks 64MB.", i+1, totalItems, fileSizeMB))
 			continue
 		}
 
-		// Read the file
 		fileData, readErr := os.ReadFile(item.FilePath)
 		if readErr != nil {
 			fmt.Printf("❌ Failed to read file %s: %v\n", item.FilePath, readErr)
 			continue
 		}
 
-		// Build caption
+		// Simple caption
 		var caption string
 		if totalItems > 1 {
-			caption = fmt.Sprintf("✅ *%s*\n\n📄 %d/%d · 📁 %.1fMB\n🤖 WA Downloader Bot",
-				result.Title, i+1, totalItems, fileSizeMB)
+			caption = fmt.Sprintf("%s · %d/%d", result.Title, i+1, totalItems)
 		} else {
-			caption = fmt.Sprintf("✅ *%s*\n\n📁 %.1fMB\n🤖 WA Downloader Bot",
-				result.Title, fileSizeMB)
+			caption = result.Title
 		}
 
-		// Send the media in the correct format
 		var sendErr error
 		switch item.MediaType {
 		case downloader.MediaTypeVideo:
@@ -115,18 +83,7 @@ func (h *Handler) processDownload(evt *events.Message, platform *utils.PlatformI
 			platform.Label, i+1, totalItems, sender, fileSizeMB, mediaTypeStr(item.MediaType))
 
 		if i < totalItems-1 {
-			fmt.Printf("⏳ Waiting %v before next send (anti-ban)...\n", sendDelay)
 			time.Sleep(sendDelay)
-		}
-	}
-
-	// Final progress update (the download phase message)
-	if progress != nil {
-		if successCount > 0 {
-			progress.finish(fmt.Sprintf("✅ *Selesai!*\n\n📦 %d/%d media berhasil dikirim dari %s",
-				successCount, totalItems, platform.Label))
-		} else {
-			progress.finish("❌ *Gagal mengirim semua media*")
 		}
 	}
 
@@ -134,10 +91,12 @@ func (h *Handler) processDownload(evt *events.Message, platform *utils.PlatformI
 		h.reactToRequest(evt, "✅")
 		h.markURLDownloaded(chatKey, platform.URL, string(platform.Platform))
 
-		// Send audio download button for TikTok videos/photos
 		if platform.Platform == utils.PlatformTikTok {
 			go h.sendTikTokAudioButton(chat, platform.URL)
 		}
+	} else {
+		h.reactToRequest(evt, "❌")
+		h.sendText(chat, "❌ Gagal mengirim media")
 	}
 }
 
