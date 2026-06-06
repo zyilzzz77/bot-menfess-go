@@ -13,7 +13,7 @@ import (
 // Hermes connects to http://localhost:8650/v1, proxy forwards to https://api.deepseek.com.
 // Needed because VPS OpenSSL 3.0.13 is rejected by DeepSeek's CDN.
 func StartTLSProxy() {
-	target := "https://api.deepseek.com"
+	target := "https://api.deepseek.com" // DeepSeek endpoint: /chat/completions (no /v1)
 	port := "8650"
 	if v := os.Getenv("PROXY_PORT"); v != "" {
 		port = v
