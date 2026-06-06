@@ -29,6 +29,10 @@ func main() {
 	tgToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	tgAdminStr := os.Getenv("TELEGRAM_ADMIN_ID")
 
+	// AI Configuration (optional)
+	deepseekKey := os.Getenv("DEEPSEEK_API_KEY")
+	aiSystemPrompt := os.Getenv("AI_SYSTEM_PROMPT")
+
 	if apiKey == "" {
 		fmt.Println("⚠️  API_KEY belum di-set!")
 		fmt.Println("📝 Buat file .env dengan isi:")
@@ -57,7 +61,13 @@ func main() {
 	}
 
 	// Create and start the bot
-	b := bot.NewBot(apiKey, downloadDir, tgBot)
+	b := bot.NewBot(bot.Config{
+		APIKey:         apiKey,
+		DownloadDir:    downloadDir,
+		DeepSeekKey:    deepseekKey,
+		AISystemPrompt: aiSystemPrompt,
+		TgBot:          tgBot,
+	})
 	if err := b.Start(); err != nil {
 		fmt.Printf("❌ Fatal error: %v\n", err)
 		if tgBot != nil {

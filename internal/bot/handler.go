@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"bot-wa/internal/ai"
 	"bot-wa/internal/downloader"
 	"bot-wa/internal/utils"
 
@@ -58,18 +59,33 @@ type Handler struct {
 	// Sticker: track users waiting to send image for sticker
 	pendingStickers map[string]time.Time // key: chatJID -> when requested
 	stickerMu       sync.RWMutex
+
+	// AI: DeepSeek-powered chat assistant
+	ai            *ai.Client          // nil if not configured
+	pendingAIAudio map[string]time.Time // key: chatJID -> when /ai was sent empty
+	aiAudioMu      sync.RWMutex
+	aiRateLimit    map[string]time.Time // key: chatJID -> last AI query time
+	aiRateLimitMu  sync.RWMutex
+
+	// TikTok audio button: tracks which button maps to which TikTok URL
+	tiktokAudioButtons map[string]string // key: buttonID (ta_<ts>) -> tiktokURL, cleaned after 10min
+	tiktokAudioMu      sync.RWMutex
 }
 
 // NewHandler creates a new message handler
-func NewHandler(client *whatsmeow.Client, dl *downloader.Downloader) *Handler {
+func NewHandler(client *whatsmeow.Client, dl *downloader.Downloader, aiClient *ai.Client) *Handler {
 	return &Handler{
 		client:              client,
 		downloader:          dl,
+		ai:                  aiClient,
 		pendingPlaylists:    make(map[string]*pendingPlaylist),
 		menfessThreads:      make(map[string]*menfessThread),
 		menfessChatMessages: make(map[string]string),
 		recentURLs:          make(map[string]map[string]*cachedURL),
 		pendingStickers:     make(map[string]time.Time),
+		pendingAIAudio:      make(map[string]time.Time),
+		aiRateLimit:         make(map[string]time.Time),
+		tiktokAudioButtons:  make(map[string]string),
 	}
 }
 
@@ -90,10 +106,25 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 		return
 	}
 
+	// Check for TikTok audio button tap
+	if h.handleTikTokAudioButton(evt) {
+		return
+	}
+
 	imgMsg := evt.Message.GetImageMessage()
 	if imgMsg != nil {
-		caption := strings.TrimSpace(strings.ToLower(imgMsg.GetCaption()))
-		if caption == "s" || caption == "sticker" {
+		caption := strings.TrimSpace(imgMsg.GetCaption())
+
+		// AI image query: caption starts with /ai or .ai
+		if h.ai != nil {
+			if aiText, ok := parseAICommand(caption); ok {
+				go h.handleAIImageCommand(evt, imgMsg, aiText)
+				return
+			}
+		}
+
+		captionLower := strings.ToLower(caption)
+		if captionLower == "s" || captionLower == "sticker" {
 			go h.handleStickerFromImage(evt, imgMsg)
 			return
 		}
@@ -109,6 +140,23 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 			return
 		}
 		return
+	}
+
+	// AI audio query: voice note after /ai (empty) command
+	if h.ai != nil {
+		audioMsg := evt.Message.GetAudioMessage()
+		if audioMsg != nil {
+			h.aiAudioMu.RLock()
+			_, hasPending := h.pendingAIAudio[chatKey]
+			h.aiAudioMu.RUnlock()
+			if hasPending {
+				h.aiAudioMu.Lock()
+				delete(h.pendingAIAudio, chatKey)
+				h.aiAudioMu.Unlock()
+				go h.handleAIAudioCommand(evt, audioMsg)
+				return
+			}
+		}
 	}
 
 	msg := ""
@@ -149,6 +197,37 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 	if bratText, ok := parseBratCommand(msg); ok {
 		go h.handleBratCommand(evt, bratText)
 		return
+	}
+
+	// AI chat commands
+	if h.ai != nil {
+		// AI + web search: /ais or .ais
+		if searchQuery, ok := parseAISCommand(msg); ok {
+			if !h.checkAIRateLimit(chatKey) {
+				h.sendText(chat, "⏳ Mohon tunggu beberapa detik sebelum bertanya lagi.")
+				return
+			}
+			go h.handleAISearchCommand(evt, searchQuery)
+			return
+		}
+
+		// AI chat: /ai or .ai
+		if aiText, ok := parseAICommand(msg); ok {
+			if !h.checkAIRateLimit(chatKey) {
+				h.sendText(chat, "⏳ Mohon tunggu beberapa detik sebelum bertanya lagi.")
+				return
+			}
+			if aiText == "" {
+				// Empty — set pending audio state
+				h.aiAudioMu.Lock()
+				h.pendingAIAudio[chatKey] = time.Now()
+				h.aiAudioMu.Unlock()
+				h.sendText(chat, "🎤 *Mode AI Suara*\n\nKirim voice note/audio sekarang untuk ditranskrip dan dijawab AI.\n\n_Ketik /ai <pertanyaan> untuk tanya pakai teks._\n\n⏰ Timeout: 2 menit")
+				return
+			}
+			go h.handleAICommand(evt, aiText)
+			return
+		}
 	}
 
 	if matches := tomp3Pattern.FindStringSubmatch(strings.TrimSpace(msg)); len(matches) == 2 {
@@ -241,16 +320,23 @@ func (h *Handler) sendHelp(evt *events.Message) {
 🎧 Spotify — Lagu (Cover + Audio)
 🎧 Spotify Playlist — Download banyak lagu sekaligus
 🧵 Threads — Photos, Videos, Carousel
-	🖼️ Sticker — kirim foto dengan caption *s* atau kirim *s* lalu foto berikutnya
+🐦 Twitter/X — Photos, Videos, Carousel
 
-*Commands:*
+*AI Commands:* (jika DEEPSEEK_API_KEY di-set)
+/ai <pertanyaan> — Tanya AI (teks)
+.ai <pertanyaan> — Sama, dengan prefix titik
+/ais <kata kunci> — AI + web search
+.ai <kata kunci> — Sama, dengan prefix titik
+Kirim gambar + caption /ai — Analisis gambar
+
+*Commands Lainnya:*
 /help — Tampilkan pesan ini
 /ping — Cek apakah bot aktif
-	tomp3(link tiktok) — download audio TikTok saja
-	menfess <no-wa> <pesan> — kirim pesan anonim ke nomor tujuan
-	balas (pesan) — balas menfess aktif tanpa reply quote
-	brat / .brat / brat — bikin sticker teks
-	s / sticker — aktifkan mode sticker untuk foto berikutnya
+tomp3(link tiktok) — download audio TikTok saja
+menfess <no-wa> <pesan> — kirim pesan anonim
+balas (pesan) — balas menfess aktif
+brat / .brat / brat — bikin sticker teks
+s / sticker — mode sticker untuk foto
 
 *Cara pakai:*
 Cukup kirim/paste link dan bot akan otomatis download! 🚀
@@ -261,7 +347,8 @@ https://www.instagram.com/p/ABC123/
 https://sck.io/p/abc-XYZ
 https://open.spotify.com/track/3daK4oX3...
 https://open.spotify.com/playlist/1uvZC8...
-https://www.threads.net/@user/post/CwVDau3r3nQ/`
+https://www.threads.net/@user/post/CwVDau3r3nQ/
+https://x.com/username/status/1234567890/`
 
 	h.sendText(evt.Info.Chat, help)
 }

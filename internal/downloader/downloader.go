@@ -263,6 +263,8 @@ func (d *Downloader) DownloadGeneric(ctx context.Context, platform string, media
 		return d.DownloadSnackVideo(ctx, mediaURL)
 	case "spotify":
 		return d.DownloadSpotify(ctx, mediaURL)
+	case "twitter":
+		return d.DownloadTwitter(ctx, mediaURL)
 	case "threads":
 		return d.DownloadThreads(ctx, mediaURL)
 	default:
