@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -36,6 +37,62 @@ func (h *Handler) processDownload(evt *events.Message, platform *utils.PlatformI
 		return
 	}
 	defer h.downloader.CleanupAll(result)
+
+	// ── Compress high-bitrate videos before sending ──
+	for _, item := range result.Items {
+		if item.MediaType != downloader.MediaTypeVideo {
+			continue
+		}
+
+		info, probeErr := downloader.ProbeVideo(item.FilePath)
+		if probeErr != nil {
+			// ffprobe not available or failed — skip compression, send original
+			if !errors.Is(probeErr, downloader.ErrFFprobeNotFound) {
+				fmt.Printf("⚠️  [Compress] Probe failed for %s: %v\n", item.FileName, probeErr)
+			}
+			continue
+		}
+
+		bitrateKbps := info.FormatBitrateKbps()
+		maxW, maxH := info.MaxDimension()
+		fmt.Printf("🔍 [Compress] %s: %dx%d, %d kbps\n",
+			item.FileName, maxW, maxH, bitrateKbps)
+
+		if !downloader.ShouldCompress(info) {
+			fmt.Printf("   ✅ Bitrate OK, skip compress\n")
+			continue
+		}
+
+		origSize := float64(item.FileSize) / 1024 / 1024
+		fmt.Printf("   🗜️  Compressing (%.1fMB, %d kbps)...\n", origSize, bitrateKbps)
+
+		compressCtx, compressCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		compressedPath := item.FilePath + ".compressed.mp4"
+
+		if compressErr := downloader.CompressVideo(compressCtx, item.FilePath, compressedPath); compressErr != nil {
+			fmt.Printf("   ⚠️  Compress failed: %v — sending original\n", compressErr)
+			compressCancel()
+			os.Remove(compressedPath) // clean up partial file
+			continue
+		}
+		compressCancel()
+
+		// Replace original with compressed version
+		os.Remove(item.FilePath)
+		if err := os.Rename(compressedPath, item.FilePath); err != nil {
+			fmt.Printf("   ⚠️  Failed to rename compressed file: %v\n", err)
+			continue
+		}
+
+		// Update item metadata
+		if fi, statErr := os.Stat(item.FilePath); statErr == nil {
+			newSize := float64(fi.Size()) / 1024 / 1024
+			reduction := (1 - newSize/origSize) * 100
+			fmt.Printf("   ✅ Compressed: %.1fMB → %.1fMB (%.0f%% reduction)\n",
+				origSize, newSize, reduction)
+			item.FileSize = fi.Size()
+		}
+	}
 
 	totalItems := len(result.Items)
 	successCount := 0
