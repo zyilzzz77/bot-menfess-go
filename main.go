@@ -13,10 +13,9 @@ import (
 
 func main() {
 	fmt.Println("╔══════════════════════════════════════════════════╗")
-	fmt.Println("║  🤖 Bot WA AI LLM · Downloader v4.0  ║")
+	fmt.Println("║       🤖 Bot WA · Downloader v4.0               ║")
 	fmt.Println("║──────────────────────────────────────────────────║")
 	fmt.Println("║  Media: TikTok · IG · Twitter · Spotify · Threads ║")
-	fmt.Println("║  AI: Hermes Agent + DeepSeek v4-pro · Auto-Ready                   ║")
 	fmt.Println("╚══════════════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -28,13 +27,6 @@ func main() {
 	downloadDir := getEnv("DOWNLOAD_DIR", "./downloads")
 	tgToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	tgAdminStr := os.Getenv("TELEGRAM_ADMIN_ID")
-
-	// AI Configuration (optional)
-	deepseekKey := os.Getenv("DEEPSEEK_API_KEY")
-	aiModel := getEnv("AI_MODEL", "deepseek-v4-pro")
-	aiSystemPrompt := os.Getenv("AI_SYSTEM_PROMPT")
-	hermesURL := os.Getenv("HERMES_API_URL") // optional: Hermes Agent API
-	hermesKey := os.Getenv("HERMES_API_KEY") // optional: Hermes API_SERVER_KEY
 
 	if apiKey == "" {
 		fmt.Println("⚠️  API_KEY belum di-set!")
@@ -65,14 +57,9 @@ func main() {
 
 	// Create and start the bot
 	b := bot.NewBot(bot.Config{
-		APIKey:         apiKey,
-		DownloadDir:    downloadDir,
-		DeepSeekKey:    deepseekKey,
-		AIModel:        aiModel,
-		AISystemPrompt: aiSystemPrompt,
-		HermesURL:      hermesURL,
-		HermesKey:      hermesKey,
-		TgBot:          tgBot,
+		APIKey:      apiKey,
+		DownloadDir: downloadDir,
+		TgBot:       tgBot,
 	})
 	if err := b.Start(); err != nil {
 		fmt.Printf("❌ Fatal error: %v\n", err)

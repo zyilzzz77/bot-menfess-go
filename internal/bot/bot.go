@@ -17,21 +17,15 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
-	"bot-wa/internal/ai"
 	"bot-wa/internal/downloader"
 	"bot-wa/internal/telegram"
 )
 
 // Config holds all bot configuration from environment variables.
 type Config struct {
-	APIKey         string
-	DownloadDir    string
-	DeepSeekKey    string
-	AIModel        string
-	AISystemPrompt string
-	HermesURL      string // optional: Hermes Agent API base URL
-	HermesKey      string // optional: Hermes API_SERVER_KEY
-	TgBot          *telegram.Bot
+	APIKey      string
+	DownloadDir string
+	TgBot       *telegram.Bot
 }
 
 // Bot represents the WhatsApp bot instance
@@ -39,7 +33,6 @@ type Bot struct {
 	client     *whatsmeow.Client
 	handler    *Handler
 	downloader *downloader.Downloader
-	ai         *ai.Client
 	tgBot      *telegram.Bot
 	container  *sqlstore.Container
 
@@ -97,27 +90,8 @@ func (b *Bot) establishConnection(reset bool) error {
 func NewBot(cfg Config) *Bot {
 	dl := downloader.NewDownloader(cfg.APIKey, cfg.DownloadDir)
 
-	var aiClient *ai.Client
-	if cfg.DeepSeekKey != "" || cfg.HermesURL != "" {
-		aiClient = ai.NewClient(ai.Config{
-			DeepSeekKey:  cfg.DeepSeekKey,
-			Model:        cfg.AIModel,
-			SystemPrompt: cfg.AISystemPrompt,
-			HermesURL:    cfg.HermesURL,
-			HermesKey:    cfg.HermesKey,
-		})
-		if cfg.HermesURL != "" {
-			fmt.Println("✅ AI (Hermes) configured")
-		} else {
-			fmt.Println("✅ AI (DeepSeek) configured")
-		}
-	} else {
-		fmt.Println("ℹ️  AI features not configured (set HERMES_API_URL or DEEPSEEK_API_KEY in .env)")
-	}
-
 	return &Bot{
 		downloader: dl,
-		ai:         aiClient,
 		tgBot:      cfg.TgBot,
 	}
 }
@@ -208,7 +182,7 @@ func (b *Bot) initClient() error {
 	b.client = whatsmeow.NewClient(deviceStore, clientLog)
 
 	// Create message handler
-	b.handler = NewHandler(b.client, b.downloader, b.ai)
+	b.handler = NewHandler(b.client, b.downloader)
 
 	// Register event handler
 	b.client.AddEventHandler(b.eventHandler)

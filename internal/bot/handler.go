@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"bot-wa/internal/ai"
 	"bot-wa/internal/downloader"
 	"bot-wa/internal/utils"
 
@@ -60,31 +59,21 @@ type Handler struct {
 	pendingStickers map[string]time.Time // key: chatJID -> when requested
 	stickerMu       sync.RWMutex
 
-	// AI: DeepSeek-powered chat assistant
-	ai             *ai.Client           // nil if not configured
-	pendingAIAudio map[string]time.Time // key: chatJID -> when /ai was sent empty
-	aiAudioMu      sync.RWMutex
-	aiRateLimit    map[string]time.Time // key: chatJID -> last AI query time
-	aiRateLimitMu  sync.RWMutex
-
 	// TikTok audio button: tracks which button maps to which TikTok URL
 	tiktokAudioButtons map[string]string // key: buttonID (ta_<ts>) -> tiktokURL, cleaned after 10min
 	tiktokAudioMu      sync.RWMutex
 }
 
 // NewHandler creates a new message handler
-func NewHandler(client *whatsmeow.Client, dl *downloader.Downloader, aiClient *ai.Client) *Handler {
+func NewHandler(client *whatsmeow.Client, dl *downloader.Downloader) *Handler {
 	return &Handler{
 		client:              client,
 		downloader:          dl,
-		ai:                  aiClient,
 		pendingPlaylists:    make(map[string]*pendingPlaylist),
 		menfessThreads:      make(map[string]*menfessThread),
 		menfessChatMessages: make(map[string]string),
 		recentURLs:          make(map[string]map[string]*cachedURL),
 		pendingStickers:     make(map[string]time.Time),
-		pendingAIAudio:      make(map[string]time.Time),
-		aiRateLimit:         make(map[string]time.Time),
 		tiktokAudioButtons:  make(map[string]string),
 	}
 }
@@ -114,16 +103,8 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 	imgMsg := evt.Message.GetImageMessage()
 	if imgMsg != nil {
 		caption := strings.TrimSpace(imgMsg.GetCaption())
-
-		// AI image query: caption starts with /ai or .ai
-		if h.ai != nil {
-			if aiText, ok := parseAICommand(caption); ok {
-				go h.handleAIImageCommand(evt, imgMsg, aiText)
-				return
-			}
-		}
-
 		captionLower := strings.ToLower(caption)
+
 		if captionLower == "s" || captionLower == "sticker" {
 			go h.handleStickerFromImage(evt, imgMsg)
 			return
@@ -140,23 +121,6 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 			return
 		}
 		return
-	}
-
-	// AI audio query: voice note after /ai (empty) command
-	if h.ai != nil {
-		audioMsg := evt.Message.GetAudioMessage()
-		if audioMsg != nil {
-			h.aiAudioMu.RLock()
-			_, hasPending := h.pendingAIAudio[chatKey]
-			h.aiAudioMu.RUnlock()
-			if hasPending {
-				h.aiAudioMu.Lock()
-				delete(h.pendingAIAudio, chatKey)
-				h.aiAudioMu.Unlock()
-				go h.handleAIAudioCommand(evt, audioMsg)
-				return
-			}
-		}
 	}
 
 	msg := ""
@@ -197,27 +161,6 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 	if bratText, ok := parseBratCommand(msg); ok {
 		go h.handleBratCommand(evt, bratText)
 		return
-	}
-
-	// AI chat commands (thinking mode via DeepSeek v4-pro)
-	if h.ai != nil {
-		// AI chat: /ai or .ai
-		if aiText, ok := parseAICommand(msg); ok {
-			if !h.checkAIRateLimit(chatKey) {
-				h.sendText(chat, "⏳ Mohon tunggu beberapa detik sebelum bertanya lagi.")
-				return
-			}
-			if aiText == "" {
-				// Empty — set pending audio state
-				h.aiAudioMu.Lock()
-				h.pendingAIAudio[chatKey] = time.Now()
-				h.aiAudioMu.Unlock()
-				h.sendText(chat, "🎤 *Mode AI Suara*\n\nKirim voice note/audio sekarang untuk ditranskrip dan dijawab AI.\n\n_Ketik /ai <pertanyaan> untuk tanya pakai teks._\n\n⏰ Timeout: 2 menit")
-				return
-			}
-			go h.handleAICommand(evt, aiText)
-			return
-		}
 	}
 
 	if matches := tomp3Pattern.FindStringSubmatch(strings.TrimSpace(msg)); len(matches) == 2 {
@@ -277,16 +220,7 @@ func (h *Handler) HandleMessage(evt *events.Message) {
 
 	platform := utils.DetectSocialMediaURL(msg)
 	if platform == nil {
-		// No social media link — route to AI (Hermes + DeepSeek)
-		if h.ai != nil {
-			if !h.checkAIRateLimit(chatKey) {
-				h.sendText(chat, "⏳ Mohon tunggu beberapa detik...")
-				return
-			}
-			go h.handleAICommand(evt, msg)
-			return
-		}
-		// AI not configured — ignore
+		// No social media link — text-only messages are ignored
 		return
 	}
 
@@ -322,12 +256,7 @@ func (h *Handler) sendHelp(evt *events.Message) {
 🧵 Threads — Photos, Videos, Carousel
 🐦 Twitter/X — Photos, Videos, Carousel
 
-*AI (Hermes + DeepSeek v4-pro):*
-/ai <pertanyaan> — Tanya AI (thinking mode)
-.ai <pertanyaan> — Sama, dengan prefix titik
-Kirim gambar + caption /ai — Analisis gambar
-
-*Commands Lainnya:*
+*Commands:*
 /help — Tampilkan pesan ini
 /ping — Cek apakah bot aktif
 tomp3(link tiktok) — download audio TikTok saja
