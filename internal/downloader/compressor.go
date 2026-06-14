@@ -65,7 +65,7 @@ func ProbeVideo(filePath string) (*VideoProbe, error) {
 		"-show_entries", "format=bit_rate,duration",
 		"-show_entries", "stream=width,height,codec_name,bit_rate",
 		"-of", "json",
-		filePath,
+		"--", filePath,
 	)
 
 	output, err := cmd.Output()
@@ -120,7 +120,7 @@ func CompressVideo(ctx context.Context, inputPath, outputPath string) error {
 		"-b:a", "128k",
 		"-preset", "fast",
 		"-movflags", "+faststart",
-		outputPath,
+		"--", outputPath,
 	}
 
 	cmd := exec.CommandContext(ctx, ffmpeg, args...)
