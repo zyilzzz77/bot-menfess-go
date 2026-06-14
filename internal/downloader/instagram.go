@@ -16,6 +16,7 @@ import (
 type igResponse struct {
 	Creator string `json:"creator"`
 	Status  bool   `json:"status"`
+	Msg     string `json:"msg"`
 	Data    []struct {
 		Type string `json:"type"`
 		URL  string `json:"url"`
@@ -49,7 +50,11 @@ func (d *Downloader) DownloadInstagram(ctx context.Context, postURL string) (*Do
 	}
 
 	if !apiResp.Status {
-		return nil, fmt.Errorf("API returned error status")
+		msg := apiResp.Msg
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return nil, fmt.Errorf("API error: %s", msg)
 	}
 
 	if len(apiResp.Data) == 0 {

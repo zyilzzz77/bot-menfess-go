@@ -61,7 +61,7 @@ type Handler struct {
 	stickerMu       sync.RWMutex
 
 	// AI: DeepSeek-powered chat assistant
-	ai            *ai.Client          // nil if not configured
+	ai             *ai.Client           // nil if not configured
 	pendingAIAudio map[string]time.Time // key: chatJID -> when /ai was sent empty
 	aiAudioMu      sync.RWMutex
 	aiRateLimit    map[string]time.Time // key: chatJID -> last AI query time

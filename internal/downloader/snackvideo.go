@@ -15,6 +15,7 @@ import (
 type snackvidResponse struct {
 	Creator string `json:"creator"`
 	Status  bool   `json:"status"`
+	Msg     string `json:"msg"`
 	Data    struct {
 		Thumbnail []string `json:"thumbnail"`
 		Author    string   `json:"author"`

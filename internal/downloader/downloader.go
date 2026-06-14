@@ -41,6 +41,7 @@ type DownloadResult struct {
 type snaptikResponse struct {
 	Creator string `json:"creator"`
 	Status  bool   `json:"status"`
+	Msg     string `json:"msg"`
 	Data    struct {
 		Video   string   `json:"video"`
 		VideoHD string   `json:"videoHD"`
@@ -117,7 +118,11 @@ func (d *Downloader) DownloadTikTok(ctx context.Context, videoURL string) (*Down
 	}
 
 	if !apiResp.Status {
-		return nil, fmt.Errorf("API returned error status")
+		msg := apiResp.Msg
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return nil, fmt.Errorf("API error: %s", msg)
 	}
 
 	result := &DownloadResult{
@@ -225,7 +230,11 @@ func (d *Downloader) DownloadTikTokAudio(ctx context.Context, videoURL string) (
 	}
 
 	if !apiResp.Status {
-		return nil, fmt.Errorf("API returned error")
+		msg := apiResp.Msg
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return nil, fmt.Errorf("API error: %s", msg)
 	}
 
 	if apiResp.Data.Audio == "" {
